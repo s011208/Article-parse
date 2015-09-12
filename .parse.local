@@ -1,0 +1,10 @@
+{
+  "applications": {
+    "Article": {
+      "applicationId": "iYp5DMTOJHG4PRFqwXDG35dfquBL2nCjq0wTnFhQ"
+    },
+    "_default": {
+      "link": "Article"
+    }
+  }
+}
