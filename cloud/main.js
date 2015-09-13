@@ -37,6 +37,66 @@ function contains(originStr, txt) {
 
 // --- utilities
 
+// +++ class
+var Monster = Parse.Object.extend("Monster", {
+                                  // Instance methods
+                                  hasSuperHumanStrength: function () {
+                                  return this.get("strength") > 18;
+                                  },
+                                  // Instance properties go in an initialize method
+                                  initialize: function (attrs, options) {
+                                  this.sound = "Rawr"
+                                  }
+                                  }, {
+                                  // Class methods
+                                  spawn: function(strength) {
+                                  var monster = new Monster();
+                                  monster.set("strength", strength);
+                                  return monster;
+                                  }
+                                  })
+;
+
+
+var ActListItem = Parse.Object.extend("ActListItem_test", {
+                                      /*instance method*/
+                                      
+                                      getAmendedDate: function() {
+                                        return this.get("amended_date");
+                                      },
+                                      
+                                      getCategoty: function () {
+                                        return this.get("category_");
+                                      },
+                                      
+                                      getTitle: function () {
+                                        return this.get("title_");
+                                      },
+                                      
+                                      getUrl: function (){
+                                        return this.get("url");
+                                      }
+                                      
+                                      }, {
+                                      /*class method*/
+                                      
+                                      newInstance: function(category, lawUrl, title, amendedDate) {
+                                      
+                                      var item = new ActListItem();
+                                      item.set("amended_date", amendedDate);
+                                      item.set("category_", category);
+                                      item.set("title_", title);
+                                      item.set("url", lawUrl);
+                                      return item;
+                                      
+                                      }
+                                      
+                                      }
+                                      )
+;
+
+// --- class
+
 var utility = require('cloud/utility/utility.js');
 var cheerio = require('cloud/libs/cheerio.js');
 var DEBUG = true;
@@ -80,8 +140,9 @@ function getAllLawList(promise, linksList, status) {
     log("getAllLawList, linksList size: " + linksList.length);
     var actItemsList = [];
     var finishCounter = 0;
+    var totalCounter = 0;
+    var totalInsertCounter = 0;
     for(i = 0; i < linksList.length; i++) {
-        if (i == 10) break;
         var link = linksList[i];
         Parse.Promise.as(i)
         .then(function(i){
@@ -95,26 +156,47 @@ function getAllLawList(promise, linksList, status) {
                           var eleTitleRaw = $("div.classtitle ul li");
                           if (eleTitleRaw != null && eleTitleRaw.length > 0) {
                           
+                          // get all items' value
                           var eleTitle = $(eleTitleRaw[0]).text();
-                          log("eleTitle :" + eleTitle);
                           var eleLaws = $("a[href][title]");
-                          log("eleLaws length: " + eleLaws.length);
                           for (j = 0; j < eleLaws.length; j++) {
                           var lawUrl = $(eleLaws[j]).attr("href");
-                          if (contains(lawUrl, "PCode")){
+                          
+                          if (contains(lawUrl, "PCode")) {
+                          ++totalCounter;
                           lawUrl = "http://law.moj.gov.tw/LawClass/LawContent.aspx?" + lawUrl.substr(lawUrl.indexOf("PCode"));
-                          log("lawUrl: " + lawUrl);
                           var title = $(eleLaws[j]).attr("title");
-                          log("title: " + title);
+                          var nodeParent = $(eleLaws[j]).parent();
+                          $(eleLaws[j]).remove();
+                          var amendedDate = nodeParent.text().trim();
+                          
+                          // update or insert
+                          var actItem = ActListItem.newInstance(eleTitle, lawUrl, title, amendedDate);
+                          // log("actItem: " + actItem.getAmendedDate() + ", " + actItem.getCategoty() + ", " + actItem.getTitle() + ", " + actItem.getUrl());
+                          actItem.save(null, {
+                                       success: function(actItem) {
+//                                       alert('New object created with objectId: ' + actItem.id);
+                                       ++totalInsertCounter;
+                                       if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+                                       log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+                                       setResult(promise, status);
+                                       }
+                                       },
+                                       error: function(gameScore, error) {
+                                       alert('Failed to create new object, with error code: ' + error.message);
+                                       ++totalInsertCounter;
+                                       if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+                                       log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+                                       setResult(promise, status);
+                                       }
+                                       }
+                                       });
+                          }
                           
                           }
                           
                           }
                           ++finishCounter;
-                          if (finishCounter == 10) {
-                            setResult(promise, status);
-                          }
-                          }
                           })
                     ;
               });
@@ -143,11 +225,11 @@ function getAllLawClassNList(pageData) {
 }
 
 function getHttpRequest(link, logTag) {
-    log("start " + logTag + " with link: " + link);
+//    log("start " + logTag + " with link: " + link);
     return Parse.Cloud.httpRequest({
                                    url: link,
                                    success: function(httpResponse) {
-                                   log("[" + logTag + "] request success, httpResponse: " + httpResponse.text.substr(0, 30));
+//                                   log("[" + logTag + "] request success, httpResponse: " + httpResponse.text.substr(0, 30));
                                    },
                                    error: function(httpResponse) {
                                    var status = httpResponse.status;
