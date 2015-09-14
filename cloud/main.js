@@ -15,7 +15,7 @@ function aloha() {
 Parse.Cloud.job("test_job", function(request, status) {
 	// test ActListItem_Job
 	var query = new Parse.Query(Parse.Object.extend("ActListItem_Job"));
-	query.get("PlqPFwkrcw", {
+	query.get(ActListItem_Job_ID, {
 		success: function(job) {
 			// The object was retrieved successfully.
 			alert("query success, bound: " + job.getJobBound());
@@ -154,25 +154,42 @@ var utility = require('cloud/utility/utility.js');
 var cheerio = require('cloud/libs/cheerio.js');
 var DEBUG = true;
 
+var ActListItem_Job_ID = "aMmTTjEOVh";
+
+function startToParseActItemList(job, status) {
+    log("job bound: " + job.getJobBound());
+    var promise = Parse.Promise.as();
+    promise = promise
+    /*
+     debug request
+     .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test1");})
+     .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test2");})
+     .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test3");})
+     .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test4");})
+     .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test5");})
+     */
+    /*get AllLawClass N web page*/
+    .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx", "getAllLawClassNPage");})
+    /*get AllLawClass N list*/
+    .then(function(pageData) {return getAllLawClassNList(pageData);})
+    /*get AllLawList*/
+    .then(function(linksList) {return getAllLawList(promise, linksList, status, job);})
+    ;
+
+}
+
 Parse.Cloud.job("ParseAllActList", function(request, status) {
-                var promise = Parse.Promise.as();
                 Parse.Cloud.useMasterKey();
-                promise = promise
-                /*
-                 debug request
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test1");})
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test2");})
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test3");})
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test4");})
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx?TY=03001005", "test5");})
-                 */
-                /*get AllLawClass N web page*/
-                .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx", "getAllLawClassNPage");})
-                /*get AllLawClass N list*/
-                .then(function(pageData) {return getAllLawClassNList(pageData);})
-                /*get AllLawList*/
-                .then(function(linksList) {return getAllLawList(promise, linksList, status);})
-                ;
+                var query = new Parse.Query(Parse.Object.extend("ActListItem_Job"));
+                query.get(ActListItem_Job_ID, {
+                          success: function(job) {
+                          startToParseActItemList(job, status);
+                          },
+                          error: function(object, error) {
+                          alert("query failed, msg: " + error.message);
+                          }
+                });
+
 })
 
 function setResult(promise, status) {
@@ -189,13 +206,31 @@ var toType = function(obj) {
     return ({}).toString.call(obj).match(/\s([a-zA-Z]+)/)[1].toLowerCase()
 }
 
-function getAllLawList(promise, linksList, status) {
-    log("getAllLawList, linksList size: " + linksList.length);
+function getAllLawList(promise, linksList, status, job) {
     var actItemsList = [];
     var finishCounter = 0;
     var totalCounter = 0;
     var totalInsertCounter = 0;
-    for(i = 0; i < linksList.length; i++) {
+    var startBound = job.getStartIndex();
+    var jobBound = job.getJobBound();
+    var endBound = startBound + job.getJobBound();
+    var updateStartBound = endBound;
+    if (endBound >= linksList.length) {
+        endBound = linksList.length;
+        updateStartBound = 0;
+    }
+    
+    
+    // update job bound
+    job.save(null, {
+             success: function(job) {
+                    job.set("start_index", updateStartBound);
+                    job.save();
+                }
+             });
+    
+    log("getAllLawList, linksList size: " + linksList.length + ", startBound: " + startBound + ", endBound: " + endBound);
+    for(i = startBound; i < endBound; i++) {
         var link = linksList[i];
         Parse.Promise.as(i)
         .then(function(i){
@@ -226,30 +261,12 @@ function getAllLawList(promise, linksList, status) {
 									  var actItem = ActListItem.newInstance(eleTitle, lawUrl, title, amendedDate);
 									  // log("actItem: " + actItem.getAmendedDate() + ", " + actItem.getCategoty() + ", " + actItem.getTitle() + ", " + actItem.getUrl());
 									  actItemList.push(actItem);
-									  /*actItem.save(null, {
-												   success: function(actItem) {
-			//                                       alert('New object created with objectId: ' + actItem.id);
-												   ++totalInsertCounter;
-												   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
-												   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-												   setResult(promise, status);
-												   }
-												   },
-												   error: function(gameScore, error) {
-												   alert('Failed to create new object, with error code: ' + error.message);
-												   ++totalInsertCounter;
-												   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
-												   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-												   setResult(promise, status);
-												   }
-												   }
-												   });*/
 								  }
 							  }
 							  Parse.Object.saveAll(actItemList, {
 										   success: function(actItem) {
 										   totalInsertCounter = totalInsertCounter + actItemList.length;
-										   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+										   if (finishCounter == jobBound && totalInsertCounter >= totalCounter) {
 										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
 										   setResult(promise, status);
 										   }
@@ -257,7 +274,7 @@ function getAllLawList(promise, linksList, status) {
 										   error: function(gameScore, error) {
 										   alert('Failed to create new object, with error code: ' + error.message);
 										   totalInsertCounter = totalInsertCounter + actItemList.length;
-										   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+										   if (finishCounter == jobBound && totalInsertCounter >= totalCounter) {
 										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
 										   setResult(promise, status);
 										   }
