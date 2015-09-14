@@ -12,6 +12,46 @@ function aloha() {
     console.log("Hello world s011208!");
 }
 
+Parse.Cloud.job("test_job", function(request, status) {
+	// test ActListItem_Job
+	var query = new Parse.Query(Parse.Object.extend("ActListItem_Job"));
+	query.get("PlqPFwkrcw", {
+		success: function(job) {
+			// The object was retrieved successfully.
+			alert("query success, bound: " + job.getJobBound());
+		},
+		error: function(object, error) {
+			alert("query failed, msg: " + error.message);
+		}
+	});
+	query.count({
+			success: function(number) {
+				alert("query success, number: " + number);
+			},
+			error: function(error) {
+				alert("query count failed, msg: " + error.message);
+			}
+		})
+	.then(function() {
+		var job = JobRange.newInstance(30, 0);
+		job.save(null, {
+			success: function(job) {
+				alert("insert success");
+			},
+			error: function(job, error) {
+				alert("insert failed");
+			}
+		}).then(function() {
+			  status.success("ParseAllActList success");
+			  }, function(error){
+			  status.error("ParseAllActList error: " + error);
+			  }
+		  )
+		  ;
+	})
+	;
+})
+
 // --- TEST
 
 // +++ utilities
@@ -57,40 +97,53 @@ var Monster = Parse.Object.extend("Monster", {
                                   })
 ;
 
+var JobRange = Parse.Object.extend("ActListItem_Job", {
+		/*instance method*/
+		getJobBound: function() {
+			return this.get("job_bound");
+		},
+		getStartIndex: function() {
+			return this.get("start_index");
+		}
+	}, {
+	/*class method*/
+		newInstance: function(jobBound, startIndex) {
+			var item = new JobRange();
+			item.set("job_bound", jobBound);
+			item.set("start_index", startIndex);
+			return item;
+		}
+	})
+;
 
 var ActListItem = Parse.Object.extend("ActListItem_test", {
                                       /*instance method*/
-                                      
-                                      getAmendedDate: function() {
-                                        return this.get("amended_date");
-                                      },
-                                      
-                                      getCategoty: function () {
-                                        return this.get("category_");
-                                      },
-                                      
-                                      getTitle: function () {
-                                        return this.get("title_");
-                                      },
-                                      
-                                      getUrl: function (){
-                                        return this.get("url");
-                                      }
+										  getAmendedDate: function() {
+											return this.get("amended_date");
+										  },
+										  
+										  getCategoty: function () {
+											return this.get("category_");
+										  },
+										  
+										  getTitle: function () {
+											return this.get("title_");
+										  },
+										  
+										  getUrl: function (){
+											return this.get("url");
+										  }
                                       
                                       }, {
                                       /*class method*/
-                                      
-                                      newInstance: function(category, lawUrl, title, amendedDate) {
-                                      
-                                      var item = new ActListItem();
-                                      item.set("amended_date", amendedDate);
-                                      item.set("category_", category);
-                                      item.set("title_", title);
-                                      item.set("url", lawUrl);
-                                      return item;
-                                      
-                                      }
-                                      
+										  newInstance: function(category, lawUrl, title, amendedDate) {
+											  var item = new ActListItem();
+											  item.set("amended_date", amendedDate);
+											  item.set("category_", category);
+											  item.set("title_", title);
+											  item.set("url", lawUrl);
+											  return item;
+										  }
                                       }
                                       )
 ;
@@ -155,46 +208,61 @@ function getAllLawList(promise, linksList, status) {
                           $ = cheerio.load(pageData.text);
                           var eleTitleRaw = $("div.classtitle ul li");
                           if (eleTitleRaw != null && eleTitleRaw.length > 0) {
-                          
-                          // get all items' value
-                          var eleTitle = $(eleTitleRaw[0]).text();
-                          var eleLaws = $("a[href][title]");
-                          for (j = 0; j < eleLaws.length; j++) {
-                          var lawUrl = $(eleLaws[j]).attr("href");
-                          
-                          if (contains(lawUrl, "PCode")) {
-                          ++totalCounter;
-                          lawUrl = "http://law.moj.gov.tw/LawClass/LawContent.aspx?" + lawUrl.substr(lawUrl.indexOf("PCode"));
-                          var title = $(eleLaws[j]).attr("title");
-                          var nodeParent = $(eleLaws[j]).parent();
-                          $(eleLaws[j]).remove();
-                          var amendedDate = nodeParent.text().trim();
-                          
-                          // update or insert
-                          var actItem = ActListItem.newInstance(eleTitle, lawUrl, title, amendedDate);
-                          // log("actItem: " + actItem.getAmendedDate() + ", " + actItem.getCategoty() + ", " + actItem.getTitle() + ", " + actItem.getUrl());
-                          actItem.save(null, {
-                                       success: function(actItem) {
-//                                       alert('New object created with objectId: ' + actItem.id);
-                                       ++totalInsertCounter;
-                                       if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
-                                       log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-                                       setResult(promise, status);
-                                       }
-                                       },
-                                       error: function(gameScore, error) {
-                                       alert('Failed to create new object, with error code: ' + error.message);
-                                       ++totalInsertCounter;
-                                       if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
-                                       log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-                                       setResult(promise, status);
-                                       }
-                                       }
-                                       });
-                          }
-                          
-                          }
-                          
+							  // get all items' value
+							  var eleTitle = $(eleTitleRaw[0]).text();
+							  var eleLaws = $("a[href][title]");
+							  var actItemList = [];
+							  for (j = 0; j < eleLaws.length; j++) {
+								  var lawUrl = $(eleLaws[j]).attr("href");
+								  if (contains(lawUrl, "PCode")) {
+									  ++totalCounter;
+									  lawUrl = "http://law.moj.gov.tw/LawClass/LawContent.aspx?" + lawUrl.substr(lawUrl.indexOf("PCode"));
+									  var title = $(eleLaws[j]).attr("title");
+									  var nodeParent = $(eleLaws[j]).parent();
+									  $(eleLaws[j]).remove();
+									  var amendedDate = nodeParent.text().trim();
+									  
+									  // update or insert
+									  var actItem = ActListItem.newInstance(eleTitle, lawUrl, title, amendedDate);
+									  // log("actItem: " + actItem.getAmendedDate() + ", " + actItem.getCategoty() + ", " + actItem.getTitle() + ", " + actItem.getUrl());
+									  actItemList.push(actItem);
+									  /*actItem.save(null, {
+												   success: function(actItem) {
+			//                                       alert('New object created with objectId: ' + actItem.id);
+												   ++totalInsertCounter;
+												   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+												   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+												   setResult(promise, status);
+												   }
+												   },
+												   error: function(gameScore, error) {
+												   alert('Failed to create new object, with error code: ' + error.message);
+												   ++totalInsertCounter;
+												   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+												   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+												   setResult(promise, status);
+												   }
+												   }
+												   });*/
+								  }
+							  }
+							  Parse.Object.saveAll(actItemList, {
+										   success: function(actItem) {
+										   totalInsertCounter = totalInsertCounter + actItemList.length;
+										   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+										   setResult(promise, status);
+										   }
+										   },
+										   error: function(gameScore, error) {
+										   alert('Failed to create new object, with error code: ' + error.message);
+										   totalInsertCounter = totalInsertCounter + actItemList.length;
+										   if (finishCounter == linksList.length && totalInsertCounter >= totalCounter) {
+										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
+										   setResult(promise, status);
+										   }
+										   }
+										   });
                           }
                           ++finishCounter;
                           })
