@@ -209,8 +209,7 @@ var toType = function(obj) {
 function getAllLawList(promise, linksList, status, job) {
     var actItemsList = [];
     var finishCounter = 0;
-    var totalCounter = 0;
-    var totalInsertCounter = 0;
+    var totalActItemCounter = 0;
     var startBound = job.getStartIndex();
     var jobBound = job.getJobBound();
     var endBound = startBound + job.getJobBound();
@@ -219,6 +218,7 @@ function getAllLawList(promise, linksList, status, job) {
         endBound = linksList.length;
         updateStartBound = 0;
     }
+	var finalJobBound = endBound - startBound;
     
     
     // update job bound
@@ -228,8 +228,9 @@ function getAllLawList(promise, linksList, status, job) {
                     job.save();
                 }
              });
+			 
     
-    log("getAllLawList, linksList size: " + linksList.length + ", startBound: " + startBound + ", endBound: " + endBound);
+    log("getAllLawList, linksList size: " + linksList.length + ", startBound: " + startBound + ", endBound: " + endBound + ", finalJobBound: " + finalJobBound);
     for(i = startBound; i < endBound; i++) {
         var link = linksList[i];
         Parse.Promise.as(i)
@@ -250,7 +251,7 @@ function getAllLawList(promise, linksList, status, job) {
 							  for (j = 0; j < eleLaws.length; j++) {
 								  var lawUrl = $(eleLaws[j]).attr("href");
 								  if (contains(lawUrl, "PCode")) {
-									  ++totalCounter;
+									  ++totalActItemCounter;
 									  lawUrl = "http://law.moj.gov.tw/LawClass/LawContent.aspx?" + lawUrl.substr(lawUrl.indexOf("PCode"));
 									  var title = $(eleLaws[j]).attr("title");
 									  var nodeParent = $(eleLaws[j]).parent();
@@ -263,25 +264,64 @@ function getAllLawList(promise, linksList, status, job) {
 									  actItemList.push(actItem);
 								  }
 							  }
-							  Parse.Object.saveAll(actItemList, {
-										   success: function(actItem) {
-										   totalInsertCounter = totalInsertCounter + actItemList.length;
-										   if (finishCounter == jobBound && totalInsertCounter >= totalCounter) {
-										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-										   setResult(promise, status);
-										   }
-										   },
-										   error: function(gameScore, error) {
-										   alert('Failed to create new object, with error code: ' + error.message);
-										   totalInsertCounter = totalInsertCounter + actItemList.length;
-										   if (finishCounter == jobBound && totalInsertCounter >= totalCounter) {
-										   log("finishCounter: " + finishCounter + ", totalCounter: " + totalCounter);
-										   setResult(promise, status);
-										   }
-										   }
-										   });
+							  Parse.Object.saveAll(actItemList).then(
+								  function(actItems) {
+									  return actItems;
+								  },
+								  function(error) {
+								      return [];
+							  })
+							  .then(function(savedActItemResults) {
+											if (savedActItemResults.length == 0) {
+												--finalJobBound;
+												if (finalJobBound == 0) {
+													log("finishCounter: " + finishCounter + ", totalActItemCounter: " + totalActItemCounter);
+													setResult(promise, status);
+												}
+											} else {
+												var query = new Parse.Query(Parse.Object.extend("ActListItem_test"));
+												query.equalTo("category_", savedActItemResults[0].getCategoty());
+												query.find()
+												.then(
+													// find duplicated items
+													function(parseActItemResults) {
+														var rtn = [];
+														for(j = 0; j < savedActItemResults.length; j++) {
+															var savedActItem = savedActItemResults[j];
+															for(i = 0; i <parseActItemResults.length; i++) {
+																var parseActItem = parseActItemResults[i];
+																if(parseActItem.getTitle() != savedActItem.getTitle()) continue;
+																if(parseActItem.id == savedActItem.id) continue;
+																rtn.push(parseActItem);
+															}
+														}
+														// return item to delete
+														log("delete item length: " + rtn.length);
+														return rtn;
+													},
+													function(error) {
+														return [];
+													}
+												)
+												.then(function(rtnParseActItemResults) {
+													log("rtnParseActItemResults item length: " + rtnParseActItemResults.length);
+													for (y = 0; y < rtnParseActItemResults.length; y++) {
+														log("delete object id: " + rtnParseActItemResults[y].id);
+														rtnParseActItemResults[y].destroy();
+													}
+													return [];
+												})
+												.then(function(emptyResults) {
+													--finalJobBound;
+													if (finalJobBound == 0) {
+														log("finishCounter: " + finishCounter + ", totalActItemCounter: " + totalActItemCounter);
+														setResult(promise, status);
+													}
+												});
+											}
+											
+										});
                           }
-                          ++finishCounter;
                           })
                     ;
               });
