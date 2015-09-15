@@ -223,12 +223,12 @@ function getAllLawList(promise, linksList, status, job) {
     
     // update job bound
     
-    job.save(null, {
-             success: function(job) {
-                    job.set("start_index", updateStartBound);
-                    job.save();
-                }
-             });
+//    job.save(null, {
+//             success: function(job) {
+//                    job.set("start_index", updateStartBound);
+//                    job.save();
+//                }
+//             });
 			 
     
     log("getAllLawList, linksList size: " + linksList.length + ", startBound: " + startBound + ", endBound: " + endBound + ", finalJobBound: " + finalJobBound);
@@ -332,6 +332,7 @@ function getAllLawList(promise, linksList, status, job) {
         });
     }
 }
+
 
 function getAllLawClassNList(pageData) {
 //    log("start getAllLawClassNList with data:");
