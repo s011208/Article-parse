@@ -222,6 +222,7 @@ function getAllLawList(promise, linksList, status, job) {
     
     
     // update job bound
+    
     job.save(null, {
              success: function(job) {
                     job.set("start_index", updateStartBound);
@@ -296,7 +297,9 @@ function getAllLawList(promise, linksList, status, job) {
 															}
 														}
 														// return item to delete
-														log("delete item length: " + rtn.length);
+                                                      if(rtn.length > 0) {
+                                                      log("delete item length: " + rtn.length + ", category: " + rtn[0].getCategoty());
+                                                      }
 														return rtn;
 													},
 													function(error) {
@@ -305,11 +308,12 @@ function getAllLawList(promise, linksList, status, job) {
 												)
 												.then(function(rtnParseActItemResults) {
 													log("rtnParseActItemResults item length: " + rtnParseActItemResults.length);
+                                                    var promises = [];
 													for (y = 0; y < rtnParseActItemResults.length; y++) {
-														log("delete object id: " + rtnParseActItemResults[y].id);
-														rtnParseActItemResults[y].destroy();
+//														log("delete object id: " + rtnParseActItemResults[y].id);
+                                                        promises.push(rtnParseActItemResults[y].destroy());
 													}
-													return [];
+													return Parse.Promise.when(promises);
 												})
 												.then(function(emptyResults) {
 													--finalJobBound;
