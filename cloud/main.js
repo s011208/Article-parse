@@ -154,6 +154,60 @@ var utility = require('cloud/utility/utility.js');
 var cheerio = require('cloud/libs/cheerio.js');
 var DEBUG = true;
 
+Parse.Cloud.job("parseAllActCount", function(request, status) {
+				Parse.Cloud.useMasterKey();
+				var promise = Parse.Promise.as();
+				promise = promise
+				.then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx", "getAllLawClassNPage");})
+				.then(function(pageData) {return getAllLawClassNList(pageData);})
+				.then(function(linksList) {
+					  var promises = [];
+					  for(i = 0; i < linksList.length; i++) {
+						  promises.push(getHttpRequest(linksList[i], "getLawWebPage"));
+					  }
+					  
+					  log("linksList length: " + linksList.length + ", promises length: " + promises.length);
+					  return Parse.Promise.when(promises);
+				})
+				.then(function() {
+					  log("arguments length: " + arguments.length);
+					  var finalResult = 0;
+					  for(i = 0; i < arguments.length; i++) {
+						  $ = cheerio.load(arguments[i].text);
+						  var eleTitleRaw = $("div.classtitle ul li");
+						  if (eleTitleRaw != null && eleTitleRaw.length > 0) {
+							var eleTitle = $(eleTitleRaw[0]).text();
+							var eleLaws = $("a[href][title]");
+							var actItemList = [];
+							for (j = 0; j < eleLaws.length; j++) {
+								var lawUrl = $(eleLaws[j]).attr("href");
+								if (contains(lawUrl, "PCode")) {
+								  ++finalResult;
+								}
+							}
+						  }
+					  }
+					  log("finalResult: " + finalResult);
+					  var ActItemCount = Parse.Object.extend("ActItemCount");
+					  var query = new Parse.Query(ActItemCount);
+					  query.first()
+					  .then(function(actItemCount) {
+								if(actItemCount == null) {
+									var actItemCount = new ActItemCount();
+									log("create new object");
+								} else {
+									log("query frist id: " +actItemCount.id);
+								}
+								actItemCount.set("total_count", finalResult);
+								actItemCount.save(null)
+								.then(function() {
+								status.success("parseAllActCount success");
+								});
+							});
+				});
+})
+
+
 var ActListItem_Job_ID = "aMmTTjEOVh";
 
 function startToParseActItemList(job, status) {
@@ -322,7 +376,7 @@ function getAllLawList(promise, linksList, status, job) {
 							.then(function(emptyResults) {
 									--finalJobBound;
 									if (finalJobBound == 0) {
-										log("finishCounter: " + finishCounter + ", totalActItemCounter: " + totalActItemCounter);
+										log("finishCounter: " + finishCounter + ", totalActItemCounter: " + totalActItemCounter + ", delete counter: " + arguments.length);
 										setResult(promise, status);
 									}
 								});
@@ -334,6 +388,9 @@ function getAllLawList(promise, linksList, status, job) {
 		});
 	}
 }
+
+
+
 
 
 function getAllLawClassNList(pageData) {
