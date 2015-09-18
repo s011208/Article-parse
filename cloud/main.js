@@ -210,6 +210,130 @@ Parse.Cloud.job("parseAllActCount", function(request, status) {
 
 var ActListItem_Job_ID = "aMmTTjEOVh";
 
+function getActListItemWebPageData(linksList, job) {
+	var promises = [];
+	var startBound = job.getStartIndex();
+	var jobBound = job.getJobBound();
+	var endBound = startBound + job.getJobBound();
+	var updateStartBound = endBound;
+	if (endBound >= linksList.length) {
+		endBound = linksList.length;
+		updateStartBound = 0;
+	}
+	var finalJobBound = endBound - startBound;
+	
+	
+		// update job bound
+	
+	job.set("start_index", updateStartBound);
+	job.save();
+	
+	for(i = startBound; i < endBound; i++) {
+//	for(i = 0; i < linksList.length; i++) {
+		promises.push(getHttpRequest(linksList[i], "getLawWebPage"));
+	}
+	
+//	log("linksList length: " + linksList.length + ", promises length: " + promises.length);
+	return Parse.Promise.when(promises);
+}
+
+function setParseAllActListResult(status) {
+	status.success("ParseAllActList_test success");
+}
+
+function debugParseAllActListWebPageData(results) {
+//	log("debugParseAllActListWebPageData, results length: " + results.length);
+	return results;
+}
+
+function parseWebData(rawData) {
+	$ = cheerio.load(rawData.text);
+	var eleTitleRaw = $("div.classtitle ul li");
+	var itemFromWebPage = [];
+	if (eleTitleRaw != null && eleTitleRaw.length > 0) {
+		var eleTitle = $(eleTitleRaw[0]).text();
+//		log("eleTitle: " + eleTitle);
+		var eleLaws = $("a[href][title]");
+		var actItemList = [];
+		for (j = 0; j < eleLaws.length; j++) {
+			var lawUrl = $(eleLaws[j]).attr("href");
+			if (contains(lawUrl, "PCode")) {
+				var lawUrl = "http://law.moj.gov.tw/LawClass/LawContent.aspx?" + lawUrl.substr(lawUrl.indexOf("PCode"));
+				var title = $(eleLaws[j]).attr("title");
+				var nodeParent = $(eleLaws[j]).parent();
+				$(eleLaws[j]).remove();
+				var amendedDate = nodeParent.text().trim();
+				var actItem = ActListItem.newInstance(eleTitle, lawUrl, title, amendedDate);
+				itemFromWebPage.push(actItem);
+			}
+		}
+//		log("itemFromWebPage: " + itemFromWebPage.length);
+		if (itemFromWebPage.length <= 0) return;
+		var query = new Parse.Query(Parse.Object.extend("ActListItem_test"));
+		query.equalTo("category_", itemFromWebPage[0].getCategoty());
+		return query.find().then(function(itemFromParseService) {
+//								 log("itemFromParseService: " + itemFromParseService.length);
+								 var itemToInsertOrUpdate = [];
+								 for(i = 0; i < itemFromWebPage.length; i++) {
+									 var webItem = itemFromWebPage[i];
+									 var hasFind = false;
+									 for(j = 0; j < itemFromParseService.length; j++) {
+										 var parseItem = itemFromParseService[j];
+										 if(parseItem.getTitle() == webItem.getTitle()) {
+											 hasFind = true;
+											 if(parseItem.getAmendedDate() != webItem.getAmendedDate()) {
+												 parseItem.set("amended_date", webItem.getAmendedDate());
+												 itemToInsertOrUpdate.push(parseItem);
+											 }
+											 break;
+										 }
+									 }
+									 if (hasFind == false) {
+										 itemToInsertOrUpdate.push(webItem);
+									 }
+								 }
+								 return Parse.Object.saveAll(itemToInsertOrUpdate).then(
+																						function(itemToInsertOrUpdate) {
+																						log("insert itemToInsertOrUpdate success, length: " + itemToInsertOrUpdate.length);
+																						},
+																						function(error) {
+																						log("insert itemToInsertOrUpdate error, " + error.message);
+																						}
+																						)
+								 });
+		;
+	}
+}
+
+function queryAndUpdateAllActList(webPageDatas) {
+	var promises = [];
+	for(i = 0; i<webPageDatas.length; i++) {
+		promises.push(parseWebData(webPageDatas[i]));
+	}
+	return Parse.Promise.when(promises);
+}
+
+Parse.Cloud.job("ParseAllActList_test", function(request, status) {
+				Parse.Cloud.useMasterKey();
+				var query = new Parse.Query(Parse.Object.extend("ActListItem_Job"));
+				var job;
+				query.get(ActListItem_Job_ID)
+				.then(function(result) {
+					  job = result;
+					  log("job start index: " + job.getStartIndex());
+					  var promise = Parse.Promise.as();
+					  promise = promise
+					  .then(function() {return getHttpRequest("http://law.moj.gov.tw/LawClass/LawClassListN.aspx", "getAllLawClassNPage");})
+					  .then(function(pageData) {return getAllLawClassNList(pageData);})
+					  .then(function(linksList) {return getActListItemWebPageData(linksList, job);})
+					  .then(function() {return debugParseAllActListWebPageData(arguments);})
+					  .then(function(obResult) {return queryAndUpdateAllActList(obResult);})
+					  .then(function() {setParseAllActListResult(status)});
+					  return promise;
+					  });
+})
+
+
 function startToParseActItemList(job, status) {
     log("job bound: " + job.getJobBound());
     var promise = Parse.Promise.as();
