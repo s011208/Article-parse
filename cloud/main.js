@@ -252,7 +252,7 @@ function parseWebData(rawData) {
 	var itemFromWebPage = [];
 	if (eleTitleRaw != null && eleTitleRaw.length > 0) {
 		var eleTitle = $(eleTitleRaw[0]).text();
-//		log("eleTitle: " + eleTitle);
+		log("category: " + eleTitle);
 		var eleLaws = $("a[href][title]");
 		var actItemList = [];
 		for (j = 0; j < eleLaws.length; j++) {
@@ -267,12 +267,13 @@ function parseWebData(rawData) {
 				itemFromWebPage.push(actItem);
 			}
 		}
-//		log("itemFromWebPage: " + itemFromWebPage.length);
+		// log("itemFromWebPage: " + itemFromWebPage.length);
 		if (itemFromWebPage.length <= 0) return;
 		var query = new Parse.Query(Parse.Object.extend("ActListItem_test"));
 		query.equalTo("category_", itemFromWebPage[0].getCategoty());
+		query.limit(1000);
 		return query.find().then(function(itemFromParseService) {
-//								 log("itemFromParseService: " + itemFromParseService.length);
+								 // log("itemFromParseService: " + itemFromParseService.length);
 								 var itemToInsertOrUpdate = [];
 								 for(i = 0; i < itemFromWebPage.length; i++) {
 									 var webItem = itemFromWebPage[i];
